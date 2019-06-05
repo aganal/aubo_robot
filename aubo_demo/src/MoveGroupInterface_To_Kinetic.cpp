@@ -103,17 +103,17 @@ int main(int argc, char** argv)
 
 
   // Visual terminal prompt (blocking)
-  visual_tools.prompt("Press 'next'1 in the RvizVisualToolsGui window to start the demo");
+  // visual_tools.prompt("Press 'next'1 in the RvizVisualToolsGui window to start the demo");
   
   //***************************************************************************************************  Home Position
 
   std::vector<double> home_position;
-  home_position.push_back(-0.001255);
-  home_position.push_back(-0.148822);
-  home_position.push_back(-1.406503);
-  home_position.push_back(0.311441);
-  home_position.push_back(-1.571295);
-  home_position.push_back(-0.002450);
+  home_position.push_back(0.132823);
+  home_position.push_back(15.723731);
+  home_position.push_back(-88.961800);
+  home_position.push_back(-14.504998);
+  home_position.push_back(-92.128105);
+  home_position.push_back(0.778022);
   move_group.setJointValueTarget(home_position);
   move_group.move();
 
@@ -124,9 +124,9 @@ int main(int argc, char** argv)
   q.setRPY(3.14,0,-1.57);       //radian
 
   geometry_msgs::Pose target_pose1;
-  target_pose1.position.x = -0.4;
-  target_pose1.position.y = -0.3;
-  target_pose1.position.z = 0.30;
+  target_pose1.position.x = -0.422141;
+  target_pose1.position.y = -0.116488;
+  target_pose1.position.z = 0.27;
   target_pose1.orientation.x = q.x();
   target_pose1.orientation.y = q.y();
   target_pose1.orientation.z = q.z();
@@ -158,14 +158,9 @@ int main(int argc, char** argv)
   move_group.setJointValueTarget(home_position);
   move_group.move();
 
-  visual_tools.prompt("Press 'next'2 in the RvizVisualToolsGui window to continue the demo");
+  // visual_tools.prompt("Press 'next'2 in the RvizVisualToolsGui window to continue the demo");
 
-
-
-
-
-
-
+/*
   // **************************************************************************************************    The second example, the joint 1 is rotated 90 degrees based on the home position.
 
   moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
@@ -197,7 +192,7 @@ int main(int argc, char** argv)
   move_group.setJointValueTarget(joint_group_positions);
   move_group.move();
 
-  visual_tools.prompt("Press 'next'3 in the RvizVisualToolsGui window to continue the demo");
+  // visual_tools.prompt("Press 'next'3 in the RvizVisualToolsGui window to continue the demo");
 
 
 
@@ -361,7 +356,7 @@ int main(int argc, char** argv)
   move_group.setJointValueTarget(home_position);
   move_group.move();
 
-  visual_tools.prompt("Press 'next'5  ADD a OBject in the RvizVisualToolsGui window to continue the demo");
+  //visual_tools.prompt("Press 'next'5  ADD a OBject in the RvizVisualToolsGui window to continue the demo");
 
 
 
@@ -558,7 +553,7 @@ int main(int argc, char** argv)
    visual_tools.deleteAllMarkers();
    visual_tools.publishText(text_pose, " Finish ", rvt::RED, rvt::XLARGE);
    visual_tools.trigger();
-
+*/
 
    // END_TUTORIAL
    ros::shutdown();
