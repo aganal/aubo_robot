@@ -22,6 +22,7 @@ if("$ENV{ROS_DISTRO}" STREQUAL "kinetic")
       tf2_ros
       #tf2_eigen
       tf2_geometry_msgs
+      aubo_msgs
     )
     Message(STATUS "<<<<<<<<<<<<<<<<<<<<<<<<<Note: Find Package for kinetic")
 endif()

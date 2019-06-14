@@ -1,0 +1,4 @@
+aubo_msgs/Vector3 target_position
+aubo_msgs/Vector3 target_rotation
+aubo_msgs/Vector3 actual_position
+aubo_msgs/Vector3 actual_rotation

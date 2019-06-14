@@ -31,6 +31,10 @@
 #include "sensor_msgs/JointState.h"
 #include <control_msgs/FollowJointTrajectoryFeedback.h>
 
+#include <aubo_msgs/JointMsg.h>
+#include <aubo_msgs/Vector3.h>
+#include <aubo_msgs/WayPoint.h>
+
 #include "otg/otgnewslib.h"
 
 #define MINIMUM_BUFFER_SIZE 300
@@ -95,6 +99,7 @@ namespace aubo_driver
             void setTagrtPosition(double *target);
 
             void updateControlStatus();
+            void test(const aubo_robot_namespace::RobotEventInfo *eventInfo, void *arg);
             void run();
             bool connectToRobotController();
             bool setIO(aubo_msgs::SetIORequest& req, aubo_msgs::SetIOResponse& resp);
@@ -128,6 +133,8 @@ namespace aubo_driver
             ros::Subscriber trajectory_execution_subs_;
             ros::Subscriber robot_control_subs_;
             ros::Publisher io_pub_;
+            ros::Publisher joint_msgs_pub_;
+            ros::Publisher waypoint_pub_;
 
         private:
             void moveItPosCallback(const trajectory_msgs::JointTrajectoryPoint::ConstPtr &msg);
@@ -174,6 +181,9 @@ namespace aubo_driver
             int collision_class_;
             std_msgs::Int32MultiArray rib_status_;
             industrial_msgs::RobotStatus robot_status_;
+
+            aubo_msgs::JointMsg joint_msg_;
+            aubo_msgs::WayPoint wayPoint_;
     };
 }
 

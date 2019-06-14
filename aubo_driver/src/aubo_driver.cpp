@@ -36,7 +36,7 @@ namespace aubo_driver {
 std::string AuboDriver::joint_name_[ARM_DOF] = {"shoulder_joint","upperArm_joint","foreArm_joint","wrist1_joint","wrist2_joint","wrist3_joint"};
 
 AuboDriver::AuboDriver(int num = 0):buffer_size_(400),io_flag_delay_(0.02),data_recieved_(false),data_count_(0),real_robot_exist_(false),emergency_stopped_(false),protective_stopped_(false),normal_stopped_(false),
-    controller_connected_flag_(false),start_move_(false),control_mode_ (aubo_driver::SendTargetGoal),rib_buffer_size_(0),jti(ARM_DOF),jto(ARM_DOF),collision_class_(6)
+    controller_connected_flag_(false),start_move_(false),control_mode_ (aubo_driver::SendTargetGoal),rib_buffer_size_(0),jti(ARM_DOF),jto(ARM_DOF),collision_class_(8)
 {
     axis_number_ = 6 + num;
     /** initialize the parameters **/
@@ -70,6 +70,9 @@ AuboDriver::AuboDriver(int num = 0):buffer_size_(400),io_flag_delay_(0.02),data_
     robot_status_pub_ = nh_.advertise<industrial_msgs::RobotStatus>("robot_status", 100);
     io_pub_ = nh_.advertise<aubo_msgs::IOState>("/aubo_driver/io_states", 10);
     rib_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/aubo_driver/rib_status", 100);
+    joint_msgs_pub_ = nh_.advertise<aubo_msgs::JointMsg>("/aubo_driver/joint_msgs", 100);
+    waypoint_pub_ = nh_.advertise<aubo_msgs::WayPoint>("/aubo_driver/waypoint", 100);
+
     io_srv_ = nh_.advertiseService("/aubo_driver/set_io",&AuboDriver::setIO, this);
     ik_srv_ = nh_.advertiseService("/aubo_driver/get_ik",&AuboDriver::getIK, this);
     fk_srv_ = nh_.advertiseService("/aubo_driver/get_fk",&AuboDriver::getFK, this);
@@ -110,8 +113,16 @@ void AuboDriver::timerCallback(const ros::TimerEvent& e)
             robot_receive_service_.robotServiceGetRobotDiagnosisInfo(rs.robot_diagnosis_info_);
             rib_buffer_size_ = rs.robot_diagnosis_info_.macTargetPosDataSize;
 
-//            robot_receive_service_.robotServiceGetRobotCurrentState(rs.state_);            // this is controlled by Robot Controller
-//            robot_receive_service_.getErrDescByCode(rs.code_);
+            /** Get JointStatus **/
+            robot_receive_service_.robotServiceGetRobotJointStatus(rs.joint_status_, 6);
+
+            /** Get waypoints **/
+            aubo_robot_namespace::Rpy rpy;
+            robot_receive_service_.robotServiceGetCurrentWaypointInfo(rs.wayPoint_);
+            robot_receive_service_.quaternionToRPY(rs.wayPoint_.orientation, rpy);
+
+            //robot_receive_service_.robotServiceGetRobotCurrentState(rs.state_);            // this is controlled by Robot Controller
+            //robot_receive_service_.getErrDescByCode(rs.code_);
             if(real_robot_exist_)
             {
                 // publish robot_status information to the controller action server.
@@ -122,6 +133,28 @@ void AuboDriver::timerCallback(const ros::TimerEvent& e)
                 robot_status_.in_motion.val       = (int)start_move_;
                 robot_status_.in_error.val        = (int)protective_stopped_;   //used for protective stop.
                 robot_status_.error_code          = (int32)rs.robot_diagnosis_info_.singularityOverSpeedAlarm;
+
+                // publish joint_msg
+                joint_msg_.actual_current.clear();
+                joint_msg_.target_current.clear();
+                joint_msg_.actual_position.clear();
+                joint_msg_.target_position.clear();
+                for (int i = 0; i < 6; i++)
+                {
+                    joint_msg_.actual_current.push_back(rs.joint_status_[i].jointCurrentI);
+                    joint_msg_.target_current.push_back(rs.joint_status_[i].jointTagCurrentI);
+                    joint_msg_.actual_position.push_back(rs.joint_status_[i].jointPosJ);
+                    joint_msg_.target_position.push_back(rs.joint_status_[i].jointTagPosJ);
+                }
+
+                // publish waypoint
+                wayPoint_.actual_position.x = rs.wayPoint_.cartPos.position.x;
+                wayPoint_.actual_position.y = rs.wayPoint_.cartPos.position.y;
+                wayPoint_.actual_position.z = rs.wayPoint_.cartPos.position.z;
+                wayPoint_.actual_rotation.x = rpy.rx;
+                wayPoint_.actual_rotation.y = rpy.ry;
+                wayPoint_.actual_rotation.z = rpy.rz;
+
             }
         }
         else if(ret == aubo_robot_namespace::ErrCode_SocketDisconnect)
@@ -147,6 +180,8 @@ void AuboDriver::timerCallback(const ros::TimerEvent& e)
 
     robot_status_pub_.publish(robot_status_);
     rib_pub_.publish(rib_status_);
+    joint_msgs_pub_.publish(joint_msg_);
+    waypoint_pub_.publish(wayPoint_);
 
     if(control_mode_ == aubo_driver::SynchronizeWithRealRobot /*|| rs.robot_controller == ROBOT_CONTROLLER*/)
     {
@@ -418,6 +453,15 @@ void AuboDriver::robotControlCallback(const std_msgs::String::ConstPtr &msg)
         else
             ROS_ERROR("Initial failed.");
     }
+    else if(msg->data == "powerOff")
+    {
+        int ret = aubo_robot_namespace::InterfaceCallSuccCode;
+        ret = robot_send_service_.rootServiceRobotShutdown(true);
+        if(ret == aubo_robot_namespace::InterfaceCallSuccCode)
+            ROS_INFO("powerOff sucess.");
+        else
+            ROS_ERROR("poerOff failed.");
+    }
 }
 
 void AuboDriver::updateControlStatus()
@@ -435,6 +479,22 @@ void AuboDriver::updateControlStatus()
     if(start_move_ && rib_buffer_size_ < MINIMUM_BUFFER_SIZE)
     {
         setRobotJointsByMoveIt();
+    }
+}
+
+void AuboDriver::test(const aubo_robot_namespace::RobotEventInfo *eventInfo, void *arg)
+{
+    ROS_INFO("123123");
+    std_msgs::String msg;
+    msg.data = "goood";
+    switch (eventInfo->eventType)
+    {
+    case 8:
+        msg.data="1231231";   
+        break;
+    
+    default:
+        break;
     }
 }
 
@@ -674,7 +734,6 @@ void AuboDriver::publishIOMsg()
                 emergency_stopped_ = true;
             else
                 emergency_stopped_ = false;
-
             if(digitalIn[1] == 0 || digitalIn[9] == 0)
                 protective_stopped_ = true;
             else

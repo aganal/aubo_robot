@@ -98,7 +98,7 @@ void JointTrajectoryAction::robotStatusCB(const industrial_msgs::RobotStatusCons
       }
       else
       {
-           ROS_INFO("Robot is protective stopped!");
+          ROS_INFO("Robot is protective stopped!");
       }
       if(has_active_goal_)
       {
