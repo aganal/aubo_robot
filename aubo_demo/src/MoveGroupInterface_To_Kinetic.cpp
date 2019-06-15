@@ -50,6 +50,15 @@
 #include <aubo_msgs/WayPoint.h>
 #include "std_msgs/String.h"
 
+#include <actionlib/server/simple_action_server.h>
+#include <actionlib/client/simple_action_client.h>
+#include <actionlib/client/terminal_state.h>
+#include <control_msgs/FollowJointTrajectoryAction.h>
+#include <control_msgs/FollowJointTrajectoryActionGoal.h>
+#include <trajectory_msgs/JointTrajectory.h>
+
+typedef actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction> ActionClient;
+
 void robotStatusCB(const industrial_msgs::RobotStatusConstPtr &msg)
 {
   ROS_INFO("protective stop flag: %d", msg->in_error.val);
@@ -65,6 +74,73 @@ void wayPointCB(const aubo_msgs::WayPoint::ConstPtr &msg)
   ROS_INFO("actual_rotation.x: %f", msg->actual_rotation.x);
 }
 
+bool moveitPlan(std::vector<double> group_variable_values, const char* mode, double velo_multiplier, double eef_step,
+                geometry_msgs::Pose* target_pose, std::vector<double>* target_joints, std::vector<geometry_msgs::Pose>* waypoints,
+                trajectory_msgs::JointTrajectory& trajectory)
+{
+  static const std::string PLANNING_GROUP = "manipulator";
+  moveit::planning_interface::MoveGroupInterface group(PLANNING_GROUP);
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  bool success;
+  std::string plan_mode = mode;
+
+  // set start state
+  robot_state::RobotState start_state(*group.getCurrentState());
+  const robot_state::JointModelGroup *joint_model_group = start_state.getJointModelGroup(group.getName());
+  group.getCurrentState()->copyJointGroupPositions(joint_model_group, group_variable_values);
+
+  start_state.setJointGroupPositions(joint_model_group, group_variable_values);
+  group.setStartState(start_state);
+
+  // if waypoints have only one points, then simply usee pose mode
+  if (plan_mode == "waypoints" && waypoints->size() < 2)
+  {
+    plan_mode = "pose";
+    target_pose = &(waypoints->at(0));
+  }
+
+  // set target pose,there are two types of target: pos or joint
+  if (plan_mode == "joint")
+  {
+    group.setJointValueTarget(*target_joints);
+  }
+  else if (plan_mode == "pose")
+  {
+    group.setPoseTarget(*target_pose);
+  }
+  else if (plan_mode == "waypoints")
+  {
+
+  }
+  else
+    ROS_ERROR("error, don't have such mode: %s", mode);
+
+  group.setPlannerId("RRTConnectkConfigDefault");
+
+  if (plan_mode == "joint"||plan_mode == "pose")
+  {
+    group.setPlanningTime(1);
+
+    success = (group.plan(plan)  == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+
+    if (success)
+      trajectory = plan.trajectory_.joint_trajectory;
+  }
+  else if (plan_mode == "waypoints")
+  {
+    double fraction = 0;
+    moveit_msgs::RobotTrajectory moveit_trajectory;
+    fraction = group.computeCartesianPath(*waypoints,
+                                          eef_step, // eef_step
+                                          0.0,      // jump_threshold
+                                          moveit_trajectory);
+
+    trajectory = moveit_trajectory.joint_trajectory;
+  }
+
+  return true;
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "MoveGroupInterface_To_Kinetic");
@@ -78,6 +154,8 @@ int main(int argc, char** argv)
   // cmd.data = "powerOn";
   // robot_control_pub_.publish(cmd);
 
+  ActionClient* action_client = new ActionClient(nh, "aubo_i3_controller/follow_joint_trajectory", true);
+
   ros::Subscriber sub_robot_status_ = nh.subscribe("robot_status", 1, robotStatusCB);
   ros::Subscriber sub_joint_msg_ = nh.subscribe("/aubo_driver/joint_msgs", 1, jointMsgCB);
   ros::Subscriber sub_wayPoint_ = nh.subscribe("/aubo_driver/waypoint", 1, wayPointCB);
@@ -86,30 +164,47 @@ int main(int argc, char** argv)
   ros::AsyncSpinner spinner(1);
   spinner.start();
 
-  // Define the planning group name
+  control_msgs::FollowJointTrajectoryGoal joint_trajectory_goal;
+  
   static const std::string PLANNING_GROUP = "manipulator";
 
-  // Create a planning group interface object and set up a planning group
   moveit::planning_interface::MoveGroupInterface move_group(PLANNING_GROUP);
 
-  // Create a planning scene interface object
   moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
 
-  // Create a robot model information object
   const robot_state::JointModelGroup* joint_model_group = move_group.getCurrentState()->getJointModelGroup(PLANNING_GROUP);
 
   //joint Position
   std::vector<double> home_position;
-  home_position.push_back(-0.652182);
-  home_position.push_back(-1.518637);
-  home_position.push_back(-0.465616);
-  home_position.push_back(-0.718959);
-  home_position.push_back(-1.553274);
-  home_position.push_back(-0.096143); 
+  home_position.push_back(-0.434921);
+  home_position.push_back(-1.253805);
+  home_position.push_back(0.923242);
+  home_position.push_back(0.037245);
+  home_position.push_back(-1.418411);
+  home_position.push_back(0.043521); 
+
+  // move home
   move_group.setJointValueTarget(home_position);
   move_group.move();
+  
+  sleep(2);
 
-  sleep(5);
+  // target_position
+  std::vector<double> target_position;
+  target_position.push_back(-0.652182);
+  target_position.push_back(-1.518637);
+  target_position.push_back(-0.465616);
+  target_position.push_back(-0.718959);
+  target_position.push_back(-1.553274);
+  target_position.push_back(-0.096143); 
+ 
+  bool ret = moveitPlan(home_position, "joint", 0.08, 0.01, 0, &target_position, 0, joint_trajectory_goal.trajectory);
+
+  action_client->waitForServer();
+  action_client->sendGoal(joint_trajectory_goal);
+  int finished = action_client->waitForResult();
+
+  sleep(2);
 
   // target pose
   tf::Quaternion q;
@@ -123,59 +218,43 @@ int main(int argc, char** argv)
   target_pose1.orientation.z = q.z();
   target_pose1.orientation.w = q.w();
 
-  move_group.setPoseTarget(target_pose1);
+  ret = moveitPlan(target_position, "pose", 0.03, 0.01, &target_pose1, 0, 0, joint_trajectory_goal.trajectory);
 
-  moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-  bool success = (move_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+  action_client->waitForServer();
+  action_client->sendGoal(joint_trajectory_goal);
+  finished = action_client->waitForResult();
+  
+  sleep(2);
 
-  // Perform planning actions
-  move_group.execute(my_plan);
-
-  sleep(5);
-
-  // Move to the home point position
-  move_group.setJointValueTarget(home_position);
+  // Move to the target position
+  move_group.setJointValueTarget(target_position);
   move_group.move();
 
-  sleep(5);
+  sleep(2);
 
   //waypoints
   std::vector<geometry_msgs::Pose> waypoints;
   waypoints.push_back(target_pose1);
-
   geometry_msgs::Pose target_pose2 = target_pose1;
-
   target_pose2.position.z -= 0.2;
-  waypoints.push_back(target_pose2);  // down
-
+  waypoints.push_back(target_pose2);
   target_pose2.position.y -= 0.15;
-  waypoints.push_back(target_pose2);  // right
-
+  waypoints.push_back(target_pose2);
   target_pose2.position.z += 0.2;
   target_pose2.position.y += 0.2;
   target_pose2.position.x -= 0.2;
-  waypoints.push_back(target_pose2);  // up and left
+  waypoints.push_back(target_pose2);
 
-  // Reduce the speed of the robot arm by the scaling factor of the maximum speed of each joint. Please note that this is not the speed of the final effector.
-  move_group.setMaxVelocityScalingFactor(0.5);
+  ret = moveitPlan(target_position, "waypoints", 0.5, 0.01, 0, 0, &waypoints, joint_trajectory_goal.trajectory);
 
-  // We want the Cartesian path to be interpolated at a resolution of 1 cm.
-  moveit_msgs::RobotTrajectory trajectory;
-  const double jump_threshold = 0.0;           //(The jump threshold is set to 0.0)
-  const double eef_step = 0.01;                //(interpolation step)
+  action_client->waitForServer();
+  action_client->sendGoal(joint_trajectory_goal);
+  finished = action_client->waitForResult();
 
-  // Calculate Cartesian interpolation path: return path score (0~1, -1 stands for error)
-  double fraction = move_group.computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
-  ROS_INFO_NAMED("tutorial", "Visualizing plan  (Cartesian path) (%.2f%% acheived)", fraction * 100.0);
+  sleep(2);
 
-  // Move to the home point position
-  my_plan.trajectory_= trajectory;
-  move_group.execute(my_plan);
-
-  sleep(1);
-
-  // cmd.data = "powerOff";
-  // robot_control_pub_.publish(cmd);
+  move_group.setJointValueTarget(home_position);
+  move_group.move();
 
   spinner.stop();
 

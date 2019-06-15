@@ -462,6 +462,15 @@ void AuboDriver::robotControlCallback(const std_msgs::String::ConstPtr &msg)
         else
             ROS_ERROR("poerOff failed.");
     }
+    else if(msg->data == "unlock protective stop")
+    {
+        int ret = aubo_robot_namespace::InterfaceCallSuccCode;
+        ret = robot_send_service_.robotServiceRobotSafetyguardResetSucc(1);
+        if(ret == aubo_robot_namespace::InterfaceCallSuccCode)
+            ROS_INFO("unlock protective stop sucess.");
+        else
+            ROS_ERROR("unlock protective stop failed.");
+    }
 }
 
 void AuboDriver::updateControlStatus()
