@@ -34,6 +34,7 @@
 #include <aubo_msgs/JointMsg.h>
 #include <aubo_msgs/Vector3.h>
 #include <aubo_msgs/WayPoint.h>
+#include <aubo_msgs/DoubleArray.h>
 
 #include "otg/otgnewslib.h"
 
@@ -131,6 +132,7 @@ namespace aubo_driver
             ros::Subscriber moveAPI_subs_;
             ros::Subscriber moveit_controller_subs_;
             ros::Subscriber trajectory_execution_subs_;
+            ros::Subscriber tcp_message_subs_;
             ros::Subscriber robot_control_subs_;
             ros::Publisher io_pub_;
             ros::Publisher joint_msgs_pub_;
@@ -146,6 +148,7 @@ namespace aubo_driver
             bool setRobotJointsByMoveIt();
             void controllerSwitchCallback(const std_msgs::Int32::ConstPtr &msg);
             void publishIOMsg();
+            void setTcpCallback(const aubo_msgs::DoubleArray::ConstPtr &msg);
 
             bool reverse_connected_;
             double last_recieve_point_[ARM_DOF];   /** To avoid joining the same waypoint to the queue **/

@@ -14,6 +14,7 @@ add_message_files(
    JointMsg.msg
    Vector3.msg
    WayPoint.msg
+   DoubleArray.msg
  )
 
 ## Generate services in the 'srv' folder

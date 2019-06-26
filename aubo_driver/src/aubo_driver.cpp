@@ -84,6 +84,7 @@ AuboDriver::AuboDriver(int num = 0):buffer_size_(400),io_flag_delay_(0.02),data_
     teach_subs_ = nh_.subscribe("teach_cmd", 10, &AuboDriver::teachCallback,this);
     moveAPI_subs_ = nh_.subscribe("moveAPI_cmd", 10, &AuboDriver::AuboAPICallback, this);
     controller_switch_sub_ = nh_.subscribe("/aubo_driver/controller_switch", 10, &AuboDriver::controllerSwitchCallback, this);
+    tcp_message_subs_ = nh_.subscribe("/aubo_driver/set_tcp", 10, &AuboDriver::setTcpCallback, this);
 }
 
 AuboDriver::~AuboDriver()
@@ -471,6 +472,34 @@ void AuboDriver::robotControlCallback(const std_msgs::String::ConstPtr &msg)
         else
             ROS_ERROR("unlock protective stop failed.");
     }
+    else if (msg->data == "stop")
+    {
+        int ret = aubo_robot_namespace::InterfaceCallSuccCode;
+        ret = robot_send_service_.rootServiceRobotMoveControl(aubo_robot_namespace::RobotMoveControlCommand::RobotMoveStop);
+        if (ret == aubo_robot_namespace::InterfaceCallSuccCode)
+            ROS_INFO("unlock protective stop sucess.");
+        else
+            ROS_ERROR("unlock protective stop failed.");
+    }
+}
+
+void AuboDriver::setTcpCallback(const aubo_msgs::DoubleArray::ConstPtr &msg)
+{
+    aubo_robot_namespace::ToolKinematicsParam tcp;
+    aubo_robot_namespace::Rpy rpy;
+    rpy.rx = msg->values[3];
+    rpy.ry = msg->values[4];
+    rpy.rz = msg->values[5];
+    robot_receive_service_.RPYToQuaternion(rpy, tcp.toolInEndOrientation);
+    tcp.toolInEndPosition.x = msg->values[0];
+    tcp.toolInEndPosition.y = msg->values[1];
+    tcp.toolInEndPosition.z = msg->values[2];
+    int ret = aubo_robot_namespace::InterfaceCallSuccCode;
+    ret = robot_receive_service_.robotServiceSetToolKinematicsParam(tcp);
+    if (ret == aubo_robot_namespace::InterfaceCallSuccCode)
+        ROS_INFO("unlock protective stop sucess.");
+    else
+        ROS_ERROR("unlock protective stop failed.");
 }
 
 void AuboDriver::updateControlStatus()
